@@ -1,5 +1,18 @@
-# Minimal Requirements - Just to get server running
+# Requirements with ML libraries for real disease detection
+# requirements.txt
+
+# Web Framework
 Flask==2.3.3
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
+
+# ML Libraries - Step by step addition
+torch==2.0.1
+torchvision==0.15.2
+numpy==1.24.3
+opencv-python-headless==4.8.1.78
+Pillow==10.0.1
+
+# Try to install detectron2 from PyPI
+# detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.0/index.html
