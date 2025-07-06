@@ -1,4 +1,4 @@
-# FINAL WORKING REQUIREMENTS - DETECTRON2 COMPATIBLE
+# SIMPLIFIED REQUIREMENTS - BUILD DETECTRON2 FROM SOURCE
 # requirements.txt
 
 # Web Framework
@@ -7,20 +7,26 @@ Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 
-# ML Libraries - EXACT COMPATIBLE VERSIONS
-torch==2.6.0
-torchvision==0.21.0
+# Core Dependencies (PyTorch installed separately in build command)
+numpy>=1.20.0,<1.27.0
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
 
-# Core Dependencies for Detectron2
-numpy==1.26.4
-opencv-python-headless==4.10.0.84
-Pillow==10.4.0
-
-# Additional dependencies Detectron2 needs
+# Detectron2 dependencies
 setuptools>=40.0.0
 wheel
 packaging
 pyyaml>=5.1
+scipy
+matplotlib
+termcolor
+tabulate
+cloudpickle
+omegaconf>=2.1
+hydra-core>=1.1
+black
+isort
+flake8
+psutil
 
-# Install Detectron2 from PyPI (CPU version)
-detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.6/index.html
+

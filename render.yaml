@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: grapeguard-backend
+    runtime: python
+    buildCommand: |
+      cd backend &&
+      python -m pip install --upgrade pip &&
+      pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cpu &&
+      pip install 'git+https://github.com/facebookresearch/detectron2.git' &&
+      pip install -r requirements.txt
+    startCommand: cd backend && gunicorn detectron_server:app
+    plan: free
+    environmentVariables:
+      - key: DETECTRON_MODEL_PATH
+        value: ./model_final.pth
+      - key: DETECTRON_THRESHOLD
+        value: "0.7"
+      - key: FLASK_ENV
+        value: production
+    pythonVersion: "3.11"
