@@ -1,21 +1,5 @@
-# Minimal Requirements for Render - WORKING VERSION
-# requirements.txt
-
-# Web Framework
+# Minimal Requirements - Just to get server running
 Flask==2.3.3
 Flask-CORS==4.0.0
 gunicorn==21.2.0
-
-# Core Libraries - Render tested versions
-torch==1.13.1
-torchvision==0.14.1
-numpy==1.24.3
-opencv-python-headless==4.8.1.78
-Pillow==10.0.1
-
-# Utility Libraries
-requests==2.31.0
 python-dotenv==1.0.0
-
-# Try to install detectron2 from PyPI (fallback)
-# detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch1.13/index.html
