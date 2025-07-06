@@ -1,4 +1,4 @@
-# Flexible Requirements - Let pip choose compatible versions
+# Requirements with ML libraries for real disease detection
 # requirements.txt
 
 # Web Framework
@@ -7,9 +7,12 @@ Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 
-# ML Libraries - Let pip choose compatible versions
-torch>=2.5.0
-torchvision>=0.20.0
-numpy>=1.24.0
-opencv-python-headless>=4.8.0
-Pillow>=10.0.0
+# ML Libraries - Render compatible versions
+torch==2.5.1
+torchvision==0.20.0
+numpy==1.24.3
+opencv-python-headless==4.8.1.78
+Pillow==10.0.1
+
+# Try to install detectron2 from PyPI
+# detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.0/index.html
