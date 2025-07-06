@@ -1,0 +1,28 @@
+# Backend Requirements for Render Deployment
+# requirements.txt
+
+# Web Framework
+Flask==2.3.3
+Flask-CORS==4.0.0
+gunicorn==21.2.0
+
+# Core ML/AI Libraries
+torch==2.0.1+cpu  # CPU version for faster deployment
+torchvision==0.15.2+cpu
+numpy==1.24.3
+opencv-python-headless==4.8.1.78
+Pillow==10.0.1
+
+# Detectron2 - Install from source
+# Will be handled in startup script since you have custom installation
+
+# Utility Libraries
+requests==2.31.0
+python-dotenv==1.0.0
+
+# For file handling
+boto3==1.29.7  # If using S3 for model storage (optional)
+
+# System dependencies (Render will handle these)
+# libgl1-mesa-glx
+# libglib2.0-0
