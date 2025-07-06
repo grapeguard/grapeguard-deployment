@@ -1,4 +1,4 @@
-# Requirements with ML libraries for real disease detection
+# FINAL WORKING REQUIREMENTS - DETECTRON2 COMPATIBLE
 # requirements.txt
 
 # Web Framework
@@ -7,12 +7,20 @@ Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 
-# ML Libraries - Python 3.11 compatible versions
-torch==2.5.1
+# ML Libraries - EXACT COMPATIBLE VERSIONS
+torch==2.6.0
 torchvision==0.21.0
-numpy>=1.26.0
-opencv-python-headless>=4.8.0
-Pillow>=10.0.0
 
-# Try to install detectron2 from PyPI
-# detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.0/index.html
+# Core Dependencies for Detectron2
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
+Pillow==10.4.0
+
+# Additional dependencies Detectron2 needs
+setuptools>=40.0.0
+wheel
+packaging
+pyyaml>=5.1
+
+# Install Detectron2 from PyPI (CPU version)
+detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.6/index.html
