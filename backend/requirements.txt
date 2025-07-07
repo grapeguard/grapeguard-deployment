@@ -3,11 +3,11 @@ Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 
-# PyTorch - REQUIRED
+# PyTorch
 torch>=2.5.0
 torchvision>=0.20.0
 
-# Core ML libraries
+# Core libraries
 numpy>=1.20.0,<1.27.0
 opencv-python-headless>=4.8.0
 Pillow>=10.0.0
@@ -16,5 +16,5 @@ wheel
 packaging
 pyyaml>=5.1
 
-# INSTALL DETECTRON2 - THIS WAS MISSING!
-detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.7/index.html
+# Install detectron2 from source (NO WHEELS FOR PYTHON 3.13)
+git+https://github.com/facebookresearch/detectron2.git
