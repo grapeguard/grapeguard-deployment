@@ -10,11 +10,4 @@ services:
       pip install -r requirements.txt
     startCommand: cd backend && gunicorn detectron_server:app
     plan: free
-    environmentVariables:
-      - key: DETECTRON_MODEL_PATH
-        value: ./model_final.pth
-      - key: DETECTRON_THRESHOLD
-        value: "0.7"
-      - key: FLASK_ENV
-        value: production
     pythonVersion: "3.11"

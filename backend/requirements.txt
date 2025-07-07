@@ -28,5 +28,3 @@ black
 isort
 flake8
 psutil
-
-
