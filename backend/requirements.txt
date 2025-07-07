@@ -1,14 +1,13 @@
-# WORKING REQUIREMENTS - INCLUDES PYTORCH
 Flask==2.3.3
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 
-# PYTORCH - REQUIRED FOR YOUR DETECTRON2 MODEL
+# PyTorch - REQUIRED
 torch>=2.5.0
 torchvision>=0.20.0
 
-# ML LIBRARIES
+# Core ML libraries
 numpy>=1.20.0,<1.27.0
 opencv-python-headless>=4.8.0
 Pillow>=10.0.0
@@ -16,3 +15,6 @@ setuptools>=40.0.0
 wheel
 packaging
 pyyaml>=5.1
+
+# INSTALL DETECTRON2 - THIS WAS MISSING!
+detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.7/index.html
