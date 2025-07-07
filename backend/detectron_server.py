@@ -1,10 +1,11 @@
-# FINAL WORKING DETECTRON2 SERVER - INSTALLS DETECTRON2 AUTOMATICALLY
+# DETECTRON2 SERVER WITH YOUR CUSTOM IMPORT PATHS
 # detectron_server.py
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import numpy as np
+import torch
 import cv2
+import numpy as np
 import base64
 import io
 from PIL import Image
@@ -12,7 +13,6 @@ import time
 import logging
 import os
 import sys
-import subprocess
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -24,55 +24,71 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 CORS(app)
 
-# Global variables for model
-DETECTRON2_AVAILABLE = False
+# Add detectron2 folder to path (like your local setup)
+detectron_path = os.path.join(os.path.dirname(__file__), 'detectron2')
+if detectron_path not in sys.path:
+    sys.path.insert(0, detectron_path)
+
+# Global variables
+DETECTRON2_LOADED = False
 predictor = None
 
-def install_detectron2():
-    """Install Detectron2 on first run"""
-    global DETECTRON2_AVAILABLE
+def load_detectron2_with_custom_path():
+    """Load detectron2 with your custom path structure"""
+    global DETECTRON2_LOADED
     
     try:
-        # Try importing torch first
+        # Check PyTorch first
         import torch
         logger.info(f"✅ PyTorch {torch.__version__} available")
         
-        # Try importing detectron2
-        import detectron2
-        DETECTRON2_AVAILABLE = True
-        logger.info("✅ Detectron2 already available")
-        return True
-        
-    except ImportError:
-        logger.info("🔧 Installing Detectron2...")
-        
+        # Try your custom import path first
         try:
-            # Install detectron2 from PyPI
-            subprocess.check_call([
-                sys.executable, "-m", "pip", "install", 
-                "detectron2", "-f", 
-                "https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.5/index.html"
-            ])
+            import detectron2.detectron2
+            from detectron2.detectron2.engine import DefaultPredictor
+            from detectron2.detectron2.config import get_cfg
+            from detectron2.detectron2.utils.visualizer import Visualizer, ColorMode
+            from detectron2.detectron2.data import MetadataCatalog
+            from detectron2.detectron2 import model_zoo
             
-            # Try import again
-            import detectron2
-            DETECTRON2_AVAILABLE = True
-            logger.info("✅ Detectron2 installed successfully!")
+            DETECTRON2_LOADED = True
+            logger.info("✅ Detectron2 loaded with custom path (detectron2.detectron2)")
             return True
             
-        except Exception as e:
-            logger.error(f"❌ Detectron2 installation failed: {e}")
-            DETECTRON2_AVAILABLE = False
-            return False
+        except ImportError as e1:
+            logger.info(f"⚠️ Custom path failed: {e1}")
+            
+            # Fallback to standard import
+            try:
+                import detectron2
+                from detectron2.engine import DefaultPredictor
+                from detectron2.config import get_cfg
+                from detectron2.utils.visualizer import Visualizer, ColorMode
+                from detectron2.data import MetadataCatalog
+                from detectron2 import model_zoo
+                
+                DETECTRON2_LOADED = True
+                logger.info("✅ Detectron2 loaded with standard path")
+                return True
+                
+            except ImportError as e2:
+                logger.error(f"❌ Both import paths failed: {e2}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"❌ Detectron2 setup failed: {e}")
+        return False
 
-class GrapeDiseaseDetector:
+class RealGrapeDiseaseDetector:
     def __init__(self, model_path, threshold=0.7):
         self.model_path = model_path
         self.threshold = threshold
         self.predictor = None
+        self.cfg = None
         self.model_loaded = False
+        self.import_mode = "unknown"
         
-        # Your exact disease classes
+        # YOUR EXACT CLASSES FROM TRAINING
         self.class_names = [
             "Karpa (Anthracnose)",          # 0
             "Bhuri (Powdery mildew)",       # 1  
@@ -81,7 +97,7 @@ class GrapeDiseaseDetector:
             "Healthy"                       # 4
         ]
         
-        # Disease mapping for frontend (1-5)
+        # Disease mapping for frontend (convert 0-4 to 1-5)
         self.disease_mapping = {
             1: {"name": "Karpa (Anthracnose)", "marathi": "कर्पा रोग", "severity": "High"},
             2: {"name": "Bhuri (Powdery Mildew)", "marathi": "भुरी रोग", "severity": "Medium"},
@@ -89,104 +105,90 @@ class GrapeDiseaseDetector:
             4: {"name": "Davnya (Downy Mildew)", "marathi": "दवयाचा रोग", "severity": "High"},
             5: {"name": "Healthy", "marathi": "निरोगी पान", "severity": "None"}
         }
+        
+        logger.info(f"🎯 Real Detector initialized for model: {model_path}")
     
-    def load_model(self):
-        """Load Detectron2 model if available"""
-        if not DETECTRON2_AVAILABLE:
-            logger.warning("⚠️ Detectron2 not available - using fallback")
-            return True
+    def load_real_model(self):
+        """Load YOUR trained Detectron2 model with correct imports"""
+        if not DETECTRON2_LOADED:
+            logger.error("❌ Detectron2 not available - CANNOT PROCEED")
+            return False
             
         if not os.path.exists(self.model_path):
-            logger.warning(f"⚠️ Model file not found: {self.model_path}")
-            return True
+            logger.error(f"❌ YOUR MODEL FILE NOT FOUND: {self.model_path}")
+            return False
             
         try:
-            from detectron2.engine import DefaultPredictor
-            from detectron2.config import get_cfg
-            from detectron2.data import MetadataCatalog
-            from detectron2 import model_zoo
+            # Try custom import path first (your local setup)
+            try:
+                from detectron2.detectron2.engine import DefaultPredictor
+                from detectron2.detectron2.config import get_cfg
+                from detectron2.detectron2.data import MetadataCatalog
+                from detectron2.detectron2 import model_zoo
+                self.import_mode = "custom"
+                logger.info("🔧 Using custom import path (detectron2.detectron2)")
+                
+            except ImportError:
+                # Fallback to standard imports
+                from detectron2.engine import DefaultPredictor
+                from detectron2.config import get_cfg
+                from detectron2.data import MetadataCatalog
+                from detectron2 import model_zoo
+                self.import_mode = "standard"
+                logger.info("🔧 Using standard import path")
             
-            logger.info("🔥 Loading your trained Detectron2 model...")
+            logger.info("🔥 LOADING YOUR REAL DETECTRON2 MODEL...")
             
+            # Create config exactly like your training
             cfg = get_cfg()
             cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
             
-            # Your model configuration
+            # YOUR MODEL CONFIGURATION
             cfg.MODEL.WEIGHTS = self.model_path
-            cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5
+            cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5  # Your 5 classes
             cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = self.threshold
-            cfg.MODEL.DEVICE = "cpu"
+            cfg.MODEL.DEVICE = "cpu"  # CPU for Render
             cfg.DATALOADER.NUM_WORKERS = 0
+            cfg.MODEL.ROI_HEADS.BATCH_SIZE_PER_IMAGE = 64  # Reduced for memory
             
-            # Register metadata
-            MetadataCatalog.get("grape_disease").thing_classes = self.class_names
+            # Register metadata EXACTLY like your training
+            dataset_name = "leaf_disease_dataset"
+            MetadataCatalog.get(dataset_name).thing_classes = self.class_names
+            MetadataCatalog.get(dataset_name).thing_colors = [
+                [255, 0, 0],    # Red - Anthracnose
+                [255, 165, 0],  # Orange - Powdery Mildew  
+                [139, 0, 0],    # Dark Red - Borer
+                [255, 0, 255],  # Magenta - Downy Mildew
+                [0, 255, 0]     # Green - Healthy
+            ]
             
-            # Create predictor
+            # Create predictor with YOUR weights
+            logger.info("🚀 Creating predictor with YOUR trained weights...")
             self.predictor = DefaultPredictor(cfg)
+            self.cfg = cfg
             
-            # Test model
+            # MANDATORY MODEL TEST
+            logger.info("🧪 Testing YOUR real model...")
             test_image = np.ones((400, 400, 3), dtype=np.uint8) * 128
             outputs = self.predictor(test_image)
             
+            logger.info(f"✅ YOUR MODEL TEST PASSED!")
+            logger.info(f"📊 Output structure: {list(outputs.keys())}")
+            logger.info(f"🎯 Test instances: {len(outputs['instances'])}")
+            logger.info(f"🔧 Import mode: {self.import_mode}")
+            
             self.model_loaded = True
-            logger.info("🎉 Your Detectron2 model is ready!")
+            logger.info("🎉 YOUR REAL DETECTRON2 MODEL IS READY!")
             return True
             
         except Exception as e:
-            logger.error(f"❌ Model loading failed: {e}")
-            logger.info("🎨 Will use color analysis fallback")
-            return True
-    
-    def analyze_leaf_color(self, image):
-        """Advanced color analysis for disease detection"""
-        try:
-            # Convert to HSV for better color analysis
-            hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-            
-            # Define color ranges for disease detection
-            green_lower = np.array([35, 40, 40])
-            green_upper = np.array([85, 255, 255])
-            yellow_lower = np.array([15, 40, 40])
-            yellow_upper = np.array([35, 255, 255])
-            brown_lower = np.array([5, 40, 20])
-            brown_upper = np.array([20, 255, 150])
-            
-            # Calculate color percentages
-            total_pixels = image.shape[0] * image.shape[1]
-            
-            green_mask = cv2.inRange(hsv, green_lower, green_upper)
-            yellow_mask = cv2.inRange(hsv, yellow_lower, yellow_upper)
-            brown_mask = cv2.inRange(hsv, brown_lower, brown_upper)
-            
-            green_percent = (cv2.countNonZero(green_mask) / total_pixels) * 100
-            yellow_percent = (cv2.countNonZero(yellow_mask) / total_pixels) * 100
-            brown_percent = (cv2.countNonZero(brown_mask) / total_pixels) * 100
-            
-            logger.info(f"🎨 Color analysis: Green={green_percent:.1f}%, Yellow={yellow_percent:.1f}%, Brown={brown_percent:.1f}%")
-            
-            # Disease detection based on color analysis
-            if green_percent > 60 and yellow_percent < 15 and brown_percent < 10:
-                # Mostly green = healthy
-                return {"class_id": 5, "confidence": min(0.9, 0.7 + (green_percent / 100) * 0.2)}
-            elif brown_percent > 20:
-                # Significant brown = Anthracnose
-                return {"class_id": 1, "confidence": min(0.85, 0.6 + (brown_percent / 100) * 0.25)}
-            elif yellow_percent > 25:
-                # Significant yellow = Powdery Mildew
-                return {"class_id": 2, "confidence": min(0.8, 0.6 + (yellow_percent / 100) * 0.2)}
-            elif brown_percent > 10 or yellow_percent > 15:
-                # Some discoloration = Downy Mildew
-                return {"class_id": 4, "confidence": 0.7}
-            else:
-                # Default to healthy
-                return {"class_id": 5, "confidence": 0.75}
-                
-        except Exception as e:
-            logger.error(f"❌ Color analysis failed: {e}")
-            return {"class_id": 5, "confidence": 0.5}
+            logger.error(f"💥 YOUR MODEL LOADING FAILED: {e}")
+            import traceback
+            logger.error(f"🔍 Full traceback: {traceback.format_exc()}")
+            return False
     
     def base64_to_image(self, base64_string):
-        """Convert base64 string to OpenCV image"""
+        """Convert base64 to OpenCV image"""
         try:
             image_data = base64.b64decode(base64_string)
             pil_image = Image.open(io.BytesIO(image_data))
@@ -201,114 +203,181 @@ class GrapeDiseaseDetector:
             logger.error(f"❌ Image conversion failed: {e}")
             return None
     
-    def predict(self, image):
-        """Make prediction using real model or color analysis"""
+    def image_to_base64(self, image):
+        """Convert OpenCV image to base64"""
+        try:
+            rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            pil_image = Image.fromarray(rgb_image)
+            
+            buffer = io.BytesIO()
+            pil_image.save(buffer, format='JPEG', quality=85)
+            img_str = base64.b64encode(buffer.getvalue()).decode()
+            
+            return f"data:image/jpeg;base64,{img_str}"
+        except Exception as e:
+            logger.error(f"❌ Image to base64 failed: {e}")
+            return None
+    
+    def predict_with_real_model(self, image, include_visualization=True):
+        """REAL PREDICTION WITH YOUR TRAINED MODEL ONLY"""
+        if not self.model_loaded:
+            raise Exception("YOUR REAL MODEL IS NOT LOADED")
+            
         start_time = time.time()
         
         try:
-            # Try real Detectron2 model first
-            if self.model_loaded and self.predictor:
-                logger.info("🔬 Using real Detectron2 model...")
-                
-                outputs = self.predictor(image)
-                instances = outputs["instances"]
-                
-                if len(instances) > 0:
-                    scores = instances.scores.cpu().numpy()
-                    classes = instances.pred_classes.cpu().numpy()
-                    
-                    # Get best detection
-                    best_idx = np.argmax(scores)
-                    class_id = int(classes[best_idx]) + 1  # Convert 0-4 to 1-5
-                    confidence = float(scores[best_idx])
-                    
-                    disease_info = self.disease_mapping[class_id]
-                    
-                    result = {
-                        "disease": disease_info["name"],
-                        "marathi": disease_info["marathi"],
-                        "confidence": round(confidence * 100, 1),
-                        "severity": disease_info["severity"],
-                        "method": "detectron2_real_model",
-                        "processing_time": round(time.time() - start_time, 3)
-                    }
-                    
-                    logger.info(f"✅ Real model prediction: {result['disease']} ({result['confidence']}%)")
-                    return result
-                else:
-                    # No detections = healthy
-                    result = {
-                        "disease": "Healthy",
-                        "marathi": "निरोगी पान",
-                        "confidence": 92.0,
-                        "severity": "None",
-                        "method": "detectron2_no_detections",
-                        "processing_time": round(time.time() - start_time, 3)
-                    }
-                    logger.info("✅ Real model: No diseases detected")
-                    return result
+            logger.info("🔬 RUNNING YOUR REAL DETECTRON2 MODEL...")
             
-            # Fallback to color analysis
-            else:
-                logger.info("🎨 Using advanced color analysis...")
+            # Get predictions from YOUR model
+            outputs = self.predictor(image)
+            instances = outputs["instances"]
+            
+            logger.info(f"🎯 YOUR MODEL OUTPUT: {len(instances)} detections")
+            
+            detections = []
+            if len(instances) > 0:
+                scores = instances.scores.cpu().numpy()
+                classes = instances.pred_classes.cpu().numpy()
+                boxes = instances.pred_boxes.tensor.cpu().numpy()
                 
-                color_result = self.analyze_leaf_color(image)
-                disease_info = self.disease_mapping[color_result['class_id']]
+                logger.info(f"📋 PROCESSING {len(scores)} REAL DETECTIONS:")
+                for i in range(len(scores)):
+                    class_id = int(classes[i])  # 0-4 from your model
+                    confidence = float(scores[i])
+                    bbox = boxes[i].tolist()
+                    
+                    logger.info(f"   Detection {i+1}: Class={class_id} ({self.class_names[class_id]}), Conf={confidence:.3f}")
+                    
+                    detections.append({
+                        "class_id": class_id + 1,  # Convert 0-4 to 1-5 for frontend
+                        "class_name": self.class_names[class_id],
+                        "confidence": confidence,
+                        "bbox": bbox
+                    })
+            
+            # Create visualization if requested
+            visualization_image = None
+            if include_visualization and len(detections) > 0:
+                try:
+                    # Use the same import mode as model loading
+                    if self.import_mode == "custom":
+                        from detectron2.detectron2.utils.visualizer import Visualizer, ColorMode
+                        from detectron2.detectron2.data import MetadataCatalog
+                    else:
+                        from detectron2.utils.visualizer import Visualizer, ColorMode
+                        from detectron2.data import MetadataCatalog
+                    
+                    metadata = MetadataCatalog.get("leaf_disease_dataset")
+                    visualizer = Visualizer(
+                        image[:, :, ::-1],  # BGR to RGB
+                        metadata=metadata,
+                        scale=1.0,
+                        instance_mode=ColorMode.IMAGE
+                    )
+                    
+                    vis_output = visualizer.draw_instance_predictions(instances.to("cpu"))
+                    vis_image = vis_output.get_image()[:, :, ::-1]  # RGB to BGR
+                    visualization_image = self.image_to_base64(vis_image)
+                    
+                    logger.info("🎨 REAL MODEL VISUALIZATION CREATED")
+                    
+                except Exception as vis_error:
+                    logger.warning(f"⚠️ Visualization failed: {vis_error}")
+            
+            # Format result
+            if detections:
+                # Get best detection
+                best_detection = max(detections, key=lambda x: x['confidence'])
+                disease_info = self.disease_mapping[best_detection['class_id']]
                 
                 result = {
                     "disease": disease_info["name"],
                     "marathi": disease_info["marathi"],
-                    "confidence": round(color_result['confidence'] * 100, 1),
+                    "confidence": round(best_detection['confidence'] * 100, 1),
                     "severity": disease_info["severity"],
-                    "method": "advanced_color_analysis",
-                    "processing_time": round(time.time() - start_time, 3)
+                    "detections": detections,
+                    "visualization": visualization_image,
+                    "processing_time": round(time.time() - start_time, 3),
+                    "model_info": {
+                        "type": "YOUR_REAL_DETECTRON2_MODEL",
+                        "architecture": "Mask R-CNN ResNet-50",
+                        "classes": len(self.class_names),
+                        "device": "cpu",
+                        "import_mode": self.import_mode,
+                        "weights": "YOUR_TRAINED_WEIGHTS"
+                    }
                 }
-                
-                logger.info(f"✅ Color analysis prediction: {result['disease']} ({result['confidence']}%)")
-                return result
-                
+            else:
+                # No detections = healthy (from your model)
+                result = {
+                    "disease": "Healthy",
+                    "marathi": "निरोगी पान",
+                    "confidence": 95.0,
+                    "severity": "None",
+                    "detections": [],
+                    "visualization": None,
+                    "processing_time": round(time.time() - start_time, 3),
+                    "model_info": {
+                        "type": "YOUR_REAL_DETECTRON2_MODEL",
+                        "import_mode": self.import_mode,
+                        "note": "No diseases detected by your trained model"
+                    }
+                }
+            
+            logger.info(f"✅ YOUR MODEL PREDICTION: {result['disease']} ({result['confidence']}%)")
+            return result
+            
         except Exception as e:
-            logger.error(f"❌ Prediction failed: {e}")
-            return {
-                "disease": "Detection Error",
-                "marathi": "तपासणी त्रुटी",
-                "confidence": 0,
-                "severity": "Unknown",
-                "method": "error",
-                "error": str(e),
-                "processing_time": round(time.time() - start_time, 3)
-            }
+            logger.error(f"💥 YOUR MODEL PREDICTION FAILED: {e}")
+            raise e
 
 # Initialize on startup
-logger.info("🚀 Starting GrapeGuard Backend...")
+logger.info("🚀 STARTING REAL GRAPE DISEASE DETECTION WITH CUSTOM IMPORTS...")
 
-# Install Detectron2 if needed
-install_success = install_detectron2()
+# Load detectron2 with your custom path
+detectron2_success = load_detectron2_with_custom_path()
 
-# Initialize detector
+if not detectron2_success:
+    logger.error("💥 DETECTRON2 SETUP FAILED")
+    # Don't exit - let server run for debugging
+
+# Initialize detector with YOUR model
 MODEL_PATH = os.getenv('DETECTRON_MODEL_PATH', './model_final.pth')
 THRESHOLD = float(os.getenv('DETECTRON_THRESHOLD', '0.7'))
 
-detector = GrapeDiseaseDetector(MODEL_PATH, THRESHOLD)
+detector = RealGrapeDiseaseDetector(MODEL_PATH, THRESHOLD)
 
 @app.route('/health', methods=['GET'])
 def health_check():
-    """Health check endpoint"""
+    """Health check - REAL MODEL STATUS ONLY"""
     return jsonify({
-        "status": "healthy",
-        "detectron2_available": DETECTRON2_AVAILABLE,
+        "status": "REAL_MODEL_READY" if detector.model_loaded else "MODEL_NOT_LOADED",
+        "detectron2_available": DETECTRON2_LOADED,
         "model_loaded": detector.model_loaded,
         "model_exists": os.path.exists(detector.model_path),
-        "prediction_method": "detectron2" if detector.model_loaded else "color_analysis",
+        "model_path": detector.model_path,
         "classes": detector.class_names,
         "threshold": detector.threshold,
-        "environment": "production"
+        "device": "cpu",
+        "import_mode": getattr(detector, 'import_mode', 'unknown'),
+        "detectron2_folder_exists": os.path.exists(os.path.join(os.path.dirname(__file__), 'detectron2')),
+        "architecture": "YOUR_TRAINED_MASK_RCNN",
+        "note": "REAL MODEL ONLY - CUSTOM IMPORT PATHS"
     })
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    """Disease prediction endpoint"""
+    """REAL MODEL PREDICTION ONLY"""
     try:
+        if not detector.model_loaded:
+            return jsonify({
+                "error": "YOUR REAL MODEL IS NOT LOADED",
+                "status": "model_not_available",
+                "detectron2_available": DETECTRON2_LOADED,
+                "model_exists": os.path.exists(detector.model_path),
+                "note": "Check /health endpoint for detailed status"
+            }), 500
+        
         data = request.get_json()
         
         if not data or 'image' not in data:
@@ -318,40 +387,43 @@ def predict():
         if image is None:
             return jsonify({"error": "Invalid image data"}), 400
         
-        result = detector.predict(image)
+        include_visualization = data.get('include_visualization', True)
+        result = detector.predict_with_real_model(image, include_visualization)
+        
         result['timestamp'] = time.time()
-        result['server_version'] = "production_v1"
+        result['api_version'] = "REAL_MODEL_CUSTOM_IMPORTS_V1"
         
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"❌ Prediction endpoint error: {e}")
+        logger.error(f"💥 REAL MODEL PREDICTION ERROR: {e}")
         return jsonify({
-            "error": str(e),
-            "type": "prediction_error"
+            "error": f"Real model prediction failed: {str(e)}",
+            "type": "real_model_error"
         }), 500
 
 @app.route('/', methods=['GET'])
 def root():
     return jsonify({
-        "message": "GrapeGuard Disease Detection API",
-        "status": "running",
+        "message": "GrapeGuard REAL AI - Your Trained Model with Custom Imports",
+        "status": "REAL_MODEL_ONLY",
         "endpoints": ["/health", "/predict"],
-        "model_status": "detectron2" if detector.model_loaded else "color_analysis",
-        "version": "production_v1"
+        "model_status": "REAL_DETECTRON2" if detector.model_loaded else "MODEL_NOT_LOADED",
+        "import_mode": getattr(detector, 'import_mode', 'unknown'),
+        "note": "NO FALLBACKS - YOUR TRAINED MODEL WITH detectron2.detectron2 IMPORTS"
     })
 
 if __name__ == '__main__':
-    # Load model on startup
-    success = detector.load_model()
+    logger.info("🔥 LOADING YOUR REAL DETECTRON2 MODEL WITH CUSTOM IMPORTS...")
+    
+    success = detector.load_real_model()
     
     if success:
-        if detector.model_loaded:
-            logger.info("🎉 Real Detectron2 model ready!")
-        else:
-            logger.info("🎨 Advanced color analysis ready!")
+        logger.info("🎉 YOUR REAL MODEL IS READY FOR PRODUCTION!")
+    else:
+        logger.error("💥 YOUR MODEL FAILED TO LOAD - CHECK LOGS")
     
     port = int(os.environ.get('PORT', 5000))
-    logger.info(f"🌐 Server running on port {port}")
+    logger.info(f"🌐 REAL MODEL SERVER RUNNING ON PORT {port}")
     
     app.run(host='0.0.0.0', port=port, debug=False)
