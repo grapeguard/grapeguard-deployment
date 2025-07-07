@@ -1,30 +1,18 @@
-# SIMPLIFIED REQUIREMENTS - BUILD DETECTRON2 FROM SOURCE
-# requirements.txt
-
-# Web Framework
+# WORKING REQUIREMENTS - INCLUDES PYTORCH
 Flask==2.3.3
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 
-# Core Dependencies (PyTorch installed separately in build command)
+# PYTORCH - REQUIRED FOR YOUR DETECTRON2 MODEL
+torch>=2.5.0
+torchvision>=0.20.0
+
+# ML LIBRARIES
 numpy>=1.20.0,<1.27.0
 opencv-python-headless>=4.8.0
 Pillow>=10.0.0
-
-# Detectron2 dependencies
 setuptools>=40.0.0
 wheel
 packaging
 pyyaml>=5.1
-scipy
-matplotlib
-termcolor
-tabulate
-cloudpickle
-omegaconf>=2.1
-hydra-core>=1.1
-black
-isort
-flake8
-psutil
