@@ -17,6 +17,7 @@ services:
   - type: web
     name: grapeguard-backend
     runtime: python
+    pythonVersion: "3.11.9"
     plan: starter
     pythonVersion: "3.11.9"
     buildCommand: |
