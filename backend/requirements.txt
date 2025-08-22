@@ -21,8 +21,24 @@
 
 
 
-# Simplified requirements.txt - Most dependencies handled in render.yaml
 Flask==2.3.3
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
+
+# Core dependencies
+numpy>=1.20.0,<1.27.0
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+pyyaml>=5.1
+setuptools>=40.0.0
+wheel
+packaging
+
+# PyTorch CPU wheels (stable for Python 3.11)
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
+
+# Detectron2 (install from source, since no official wheels for Python 3.11+)
+git+https://github.com/facebookresearch/detectron2.git
