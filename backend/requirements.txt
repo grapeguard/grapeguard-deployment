@@ -1,20 +1,51 @@
+# Flask==2.3.3
+# Flask-CORS==4.0.0
+# gunicorn==21.2.0
+# python-dotenv==1.0.0
+
+# # PyTorch
+# torch>=2.5.0
+# torchvision>=0.20.0
+
+# # Core libraries
+# numpy>=1.20.0,<1.27.0
+# opencv-python-headless>=4.8.0
+# Pillow>=10.0.0
+# setuptools>=40.0.0
+# wheel
+# packaging
+# pyyaml>=5.1
+
+# # Install detectron2 from source (NO WHEELS FOR PYTHON 3.13)
+# git+https://github.com/facebookresearch/detectron2.git
+
+
+# Requirements for Render deployment with Python 3.11
 Flask==2.3.3
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 
-# PyTorch
-torch>=2.5.0
-torchvision>=0.20.0
-
-# Core libraries
-numpy>=1.20.0,<1.27.0
-opencv-python-headless>=4.8.0
-Pillow>=10.0.0
+# Core dependencies
+numpy==1.24.3
 setuptools>=40.0.0
 wheel
 packaging
 pyyaml>=5.1
 
-# Install detectron2 from source (NO WHEELS FOR PYTHON 3.13)
+# PyTorch for CPU deployment
+--find-links https://download.pytorch.org/whl/torch_stable.html
+torch==2.0.1+cpu
+torchvision==0.15.2+cpu
+
+# Image processing
+opencv-python-headless==4.8.1.78
+Pillow==10.0.1
+
+# Detectron2 from source (most reliable for deployment)
 git+https://github.com/facebookresearch/detectron2.git
+
+# Additional dependencies
+pycocotools==2.0.7
+iopath
+fvcore
