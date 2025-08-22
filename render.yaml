@@ -22,11 +22,8 @@ services:
     pythonVersion: "3.11.9"
     buildCommand: |
       python -m pip install --upgrade pip &&
-      pip install torch==2.2.2+cpu torchvision==0.17.2+cpu torchaudio==2.2.2+cpu --index-url https://download.pytorch.org/whl/cpu &&
-      pip install numpy==1.24.3 opencv-python-headless==4.8.1.78 Pillow==10.0.1 &&
-      pip install Flask==2.3.3 Flask-CORS==4.0.0 gunicorn==21.2.0 python-dotenv==1.0.0 &&
-      pip install pycocotools==2.0.7 iopath fvcore &&
-      pip install detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.2/index.html
+      pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cpu &&
+      pip install -r backend/requirements.txt
     startCommand: gunicorn backend.detectron_server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
     env:
       - key: DETECTRON_MODEL_PATH
