@@ -280,6 +280,14 @@ THRESHOLD = float(os.getenv('DETECTRON_THRESHOLD', '0.7'))
 logger.info(f"🔧 Initializing detector with model: {MODEL_PATH}")
 detector = GrapeDiseaseDetector(MODEL_PATH, THRESHOLD)
 
+# Load model immediately when server starts (works with Gunicorn too)
+success = detector.load_model()
+if success:
+    logger.info("🎉 Model loaded at startup (global init)")
+else:
+    logger.error("💥 Model failed to load at startup")
+
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Enhanced health check endpoint"""
@@ -393,14 +401,14 @@ if __name__ == '__main__':
     logger.info(f"Working directory: {os.getcwd()}")
     logger.info(f"Model path: {MODEL_PATH}")
     
-    # Load model
-    success = detector.load_model()
+    # # Load model
+    # success = detector.load_model()
     
-    if success:
-        logger.info("🎉 SERVER READY - MODEL LOADED!")
-    else:
-        logger.error("💥 MODEL FAILED TO LOAD - Server starting anyway")
-        logger.error("Check /health endpoint for diagnostics")
+    # if success:
+    #     logger.info("🎉 SERVER READY - MODEL LOADED!")
+    # else:
+    #     logger.error("💥 MODEL FAILED TO LOAD - Server starting anyway")
+    #     logger.error("Check /health endpoint for diagnostics")
     
     # Start server
     port = int(os.environ.get('PORT', 5000))
