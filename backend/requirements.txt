@@ -41,4 +41,5 @@ torchvision==0.17.2
 torchaudio==2.2.2
 
 # Detectron2 (install from source, since no official wheels for Python 3.11+)
-git+https://github.com/facebookresearch/detectron2.git
+detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.2/detectron2-0.6%2Bcpu-cp311-cp311-linux_x86_64.whl
+
