@@ -1,4 +1,4 @@
-Flask==2.3.3
+Flask==2.3.2
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
@@ -18,5 +18,5 @@ torchvision==0.15.2+cpu
 torchaudio==2.0.2+cpu
 --index-url https://download.pytorch.org/whl/cpu
 
-# Detectron2 from pre-built wheel (compatible with Python 3.10)
-detectron2 -f https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.0/index.html
+# Detectron2 from pre-built wheel (compatible with Python 3.10 and torch 2.0.1)
+detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.0/detectron2-0.6%2Bcpu-cp310-cp310-linux_x86_64.whl

@@ -1,6 +1,4 @@
-# FIXED DETECTRON2 SERVER FOR DEPLOYMENT
-# detectron_server.py
-
+# FI# CORRECT IMPORTS - use these exactly
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import torch
@@ -61,7 +59,7 @@ class GrapeDiseaseDetector:
         try:
             logger.info("🚀 Starting model loading...")
             
-            # Import detectron2
+            # CORRECT DETECTRON2 IMPORTS
             from detectron2.engine import DefaultPredictor
             from detectron2.config import get_cfg
             from detectron2.data import MetadataCatalog
@@ -94,7 +92,6 @@ class GrapeDiseaseDetector:
                     
                 # Always load with CPU mapping for deployment stability
                 logger.info("📥 Loading model weights with CPU mapping...")
-                model_state = torch.load(self.model_path, map_location=torch.device('cpu'))
                 cfg.MODEL.WEIGHTS = self.model_path
                 
             except Exception as weight_error:
@@ -131,7 +128,7 @@ class GrapeDiseaseDetector:
                 try:
                     logger.info("🔄 Trying alternative predictor creation...")
                     # Force reload weights
-                    cfg.MODEL.WEIGHTS = torch.load(self.model_path, map_location='cpu')
+                    cfg.MODEL.WEIGHTS = self.model_path
                     self.predictor = DefaultPredictor(cfg)
                     logger.info("✅ Alternative predictor creation successful")
                 except Exception as alt_error:
@@ -169,6 +166,9 @@ class GrapeDiseaseDetector:
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             return False
+
+    # Rest of your class methods remain the same...
+    # [Keep all your existing base64_to_image, predict, and other methods]
     
     def base64_to_image(self, base64_string):
         """Convert base64 to OpenCV image"""

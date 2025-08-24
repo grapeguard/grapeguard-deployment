@@ -5,12 +5,14 @@ services:
     plan: starter
     pythonVersion: "3.10.11"
     buildCommand: |
-      chmod +x backend/build.sh
-      ./backend/build.sh
+      pip install --upgrade pip
+      sudo apt-get update
+      sudo apt-get install -y libglib2.0-0 libsm6 libxrender1 libxext6 libgl1
+      pip install -r backend/requirements.txt
     startCommand: gunicorn backend.detectron_server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
     env:
       - key: DETECTRON_MODEL_PATH
-        value: "./backend/model_final.pth"
+        value: "model_final.pth"
       - key: DETECTRON_THRESHOLD  
         value: "0.7"
       - key: FLASK_ENV
