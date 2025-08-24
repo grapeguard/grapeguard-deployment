@@ -62,10 +62,10 @@ class GrapeDiseaseDetector:
             logger.info("🚀 Starting model loading...")
             
             # Import detectron2
-            from detectron2.detectron2.engine import DefaultPredictor
-            from detectron2.detectron2.config import get_cfg
-            from detectron2.detectron2.data import MetadataCatalog
-            from detectron2.detectron2 import model_zoo
+            from detectron2.engine import DefaultPredictor
+            from detectron2.config import get_cfg
+            from detectron2.data import MetadataCatalog
+            from detectron2 import model_zoo
             
             logger.info("✅ Detectron2 imported successfully")
             

@@ -1,34 +1,16 @@
-# services:
-#   - type: web
-#     name: grapeguard-backend
-#     runtime: python
-#     buildCommand: |
-#       cd backend &&
-#       python -m pip install --upgrade pip &&
-#       pip install torch==2.3.1 torchvision==0.18.1 --index-url https://download.pytorch.org/whl/cpu &&
-#       pip install 'git+https://github.com/facebookresearch/detectron2.git' &&
-#       pip install -r requirements.txt
-#     startCommand: cd backend && gunicorn detectron_server:app
-#     plan: free
-#     pythonVersion: "3.11"
-
-
 services:
   - type: web
     name: grapeguard-backend
     runtime: python
-    pythonVersion: "3.11.9"
     plan: starter
-    pythonVersion: "3.11.9"
+    pythonVersion: "3.10.11"
     buildCommand: |
-      python -m pip install --upgrade pip &&
-      pip install torch==2.2.2 torchvision==0.17.2 torchaudio==2.2.2 --index-url https://download.pytorch.org/whl/cpu &&
-      pip install -r backend/requirements.txt
-      pip install git+https://github.com/facebookresearch/detectron2.git
+      chmod +x backend/build.sh
+      ./backend/build.sh
     startCommand: gunicorn backend.detectron_server:app --bind 0.0.0.0:$PORT --timeout 120 --workers 1
     env:
       - key: DETECTRON_MODEL_PATH
-        value: "./model_final.pth"
+        value: "./backend/model_final.pth"
       - key: DETECTRON_THRESHOLD  
         value: "0.7"
       - key: FLASK_ENV
