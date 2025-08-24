@@ -1,22 +1,21 @@
-Flask==2.3.2
+Flask==2.3.3
 Flask-CORS==4.0.0
 gunicorn==21.2.0
 python-dotenv==1.0.0
 
 # Core dependencies
-numpy==1.24.3
-opencv-python-headless==4.8.0.74
-Pillow==10.0.0
-pyyaml==6.0.1
-setuptools==68.0.0
-wheel==0.41.2
-packaging==23.1
+numpy>=1.20.0,<1.27.0
+opencv-python-headless>=4.8.0
+Pillow>=10.0.0
+pyyaml>=5.1
+setuptools>=40.0.0
+wheel
+packaging
 
-# PyTorch CPU version (compatible with Python 3.10)
-torch==2.0.1+cpu
-torchvision==0.15.2+cpu
-torchaudio==2.0.2+cpu
---index-url https://download.pytorch.org/whl/cpu
+# PyTorch CPU wheels (stable for Python 3.10)
+torch==2.2.2
+torchvision==0.17.2
+torchaudio==2.2.2
 
-# Detectron2 from pre-built wheel (compatible with Python 3.10 and torch 2.0.1)
-detectron2 @ https://dl.fbaipublicfiles.com/detectron2/wheels/cpu/torch2.0/detectron2-0.6%2Bcpu-cp310-cp310-linux_x86_64.whl
+# Detectron2 from source (NO WHEELS FOR PYTHON 3.13)
+git+https://github.com/facebookresearch/detectron2.git
