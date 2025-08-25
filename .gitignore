@@ -22,6 +22,7 @@
 # Large Python environment (EXCLUDE from Git)
 detectron_env/
 venv/
+.venv/
 env/
 __pycache__/
 *.pyc

@@ -1,416 +1,317 @@
-# FI# CORRECT IMPORTS - use these exactly
+# backend/detectron_server.py
+import os
+import logging
+import time
+import io
+import base64
+from pathlib import Path
+from typing import Optional
+
+import requests
+from dotenv import load_dotenv
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import torch
-import cv2
-import numpy as np
-import base64
-import io
-from PIL import Image
-import time
-import logging
-import os
-from dotenv import load_dotenv
-import sys
 
-# Force CPU usage for deployment
-os.environ["CUDA_VISIBLE_DEVICES"] = ""
+# Load .env from backend folder explicitly
+BASE_DIR = Path(__file__).resolve().parent
+load_dotenv(BASE_DIR / ".env")
 
-load_dotenv()
-
-# Configure logging
+# Logging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("detectron_server")
 
+# Config from env
+MODEL_PATH_ENV = os.getenv("DETECTRON_MODEL_PATH", "model_final.pth")
+# Ensure absolute path if relative
+MODEL_PATH = Path(MODEL_PATH_ENV) if Path(MODEL_PATH_ENV).is_absolute() else (BASE_DIR / MODEL_PATH_ENV)
+MODEL_DOWNLOAD_URL = os.getenv("MODEL_DOWNLOAD_URL")  # optional
+THRESHOLD = float(os.getenv("DETECTRON_THRESHOLD", "0.7"))
+PORT = int(os.getenv("PORT", "5000"))
+CORS_ALLOWED = os.getenv("CORS_ALLOWED_ORIGINS", "*")  # comma-separated or "*" for all
+
+# Flask app
 app = Flask(__name__)
-CORS(app)
+origins = [o.strip() for o in CORS_ALLOWED.split(",")] if CORS_ALLOWED != "*" else "*"
+CORS(app, resources={r"/*": {"origins": origins}})
 
-# Global variables
+# Runtime state
+detector = None
 model_loaded = False
-predictor = None
+torch_version = None
+detectron2_version = None
+detectron2_import_error = None
+
+
+def ensure_model(path: Path, download_url: Optional[str] = None) -> bool:
+    """Return True if model exists and is of reasonable size, otherwise try to download if URL provided."""
+    if path.exists() and path.stat().st_size > 100_000_000:  # ~100MB minimal sanity check
+        logger.info("Model already present: %s (%.2f MB)", path, path.stat().st_size / (1024 * 1024))
+        return True
+
+    if download_url:
+        logger.info("Model missing or small. Downloading from %s ...", download_url)
+        try:
+            r = requests.get(download_url, stream=True, timeout=600)
+            r.raise_for_status()
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "wb") as f:
+                for chunk in r.iter_content(1024 * 1024):
+                    if chunk:
+                        f.write(chunk)
+            logger.info("Model downloaded to %s", path)
+            return path.exists() and path.stat().st_size > 100_000_000
+        except Exception as e:
+            logger.exception("Failed to download model: %s", e)
+            return False
+
+    logger.warning("Model not found and no MODEL_DOWNLOAD_URL provided: %s", path)
+    return False
+
 
 class GrapeDiseaseDetector:
-    def __init__(self, model_path, threshold=0.7):
-        self.model_path = model_path
-        self.threshold = threshold
+    def __init__(self, model_path: Path, threshold: float = 0.7):
+        self.model_path = str(model_path)
+        self.threshold = float(threshold)
         self.predictor = None
-        self.model_loaded = False
-        
-        # YOUR EXACT CLASSES
         self.class_names = [
             "Karpa (Anthracnose)",          # 0
-            "Bhuri (Powdery mildew)",       # 1  
-            "Bokadlela (Borer Infestation)", # 2
-            "Davnya (Downey Mildew)",       # 3
+            "Bhuri (Powdery mildew)",       # 1
+            "Bokadlela (Borer Infestation)",# 2
+            "Davnya (Downy Mildew)",        # 3
             "Healthy"                       # 4
         ]
-        
-        # Disease mapping (0-4 to 1-5 for frontend)
-        self.disease_mapping = {
-            1: {"name": "Karpa (Anthracnose)", "marathi": "कर्पा रोग", "severity": "High"},
-            2: {"name": "Bhuri (Powdery Mildew)", "marathi": "भुरी रोग", "severity": "Medium"},
-            3: {"name": "Bokadlela (Borer Infestation)", "marathi": "बोकाडलेला", "severity": "High"},
-            4: {"name": "Davnya (Downy Mildew)", "marathi": "दवयाचा रोग", "severity": "High"},
-            5: {"name": "Healthy", "marathi": "निरोगी पान", "severity": "None"}
-        }
-    
-    def load_model(self):
-        """Load your Detectron2 model with deployment fixes"""
+
+    def load_model(self) -> bool:
+        """Import detectron2 and create DefaultPredictor. Returns True on success."""
+        global torch_version, detectron2_version, detectron2_import_error
         try:
-            logger.info("🚀 Starting model loading...")
-            
-            # CORRECT DETECTRON2 IMPORTS
+            import torch
+            torch_version = torch.__version__
+            logger.info("torch %s", torch_version)
+
+            # detectron2 imports
             from detectron2.engine import DefaultPredictor
             from detectron2.config import get_cfg
-            from detectron2.data import MetadataCatalog
             from detectron2 import model_zoo
-            
-            logger.info("✅ Detectron2 imported successfully")
-            
-            # Check if model file exists
-            if not os.path.exists(self.model_path):
-                logger.error(f"❌ Model file not found: {self.model_path}")
-                logger.error(f"Current directory: {os.getcwd()}")
-                logger.error(f"Directory contents: {os.listdir('.')}")
+            from detectron2.data import MetadataCatalog
+
+            try:
+                import detectron2
+                detectron2_version = getattr(detectron2, "__version__", "unknown")
+            except Exception:
+                detectron2_version = "unknown"
+
+            logger.info("detectron2 import OK (%s)", detectron2_version)
+
+            if not ensure_model(Path(self.model_path), MODEL_DOWNLOAD_URL):
+                logger.error("Model not available at %s", self.model_path)
                 return False
-            
-            logger.info(f"✅ Model file found: {self.model_path}")
-            logger.info(f"Model file size: {os.path.getsize(self.model_path) / (1024*1024):.1f} MB")
-            
-            # Create config
+
             cfg = get_cfg()
+            # Base COCO Mask R-CNN config; keep this unless you used custom backbone
             cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_50_FPN_3x.yaml"))
-            
-            # CRITICAL: Force CPU device for deployment
-            cfg.MODEL.DEVICE = "cpu"
-            logger.info("🖥️ Using CPU device for deployment")
-            
-            # Load model weights with CPU mapping
-            try:
-                if torch.cuda.is_available():
-                    logger.info("CUDA available but forcing CPU for deployment")
-                    
-                # Always load with CPU mapping for deployment stability
-                logger.info("📥 Loading model weights with CPU mapping...")
-                cfg.MODEL.WEIGHTS = self.model_path
-                
-            except Exception as weight_error:
-                logger.error(f"❌ Weight loading error: {weight_error}")
-                return False
-            
-            # Your model settings
-            cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5
+            cfg.MODEL.WEIGHTS = self.model_path
+            cfg.MODEL.ROI_HEADS.NUM_CLASSES = len(self.class_names)
             cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = self.threshold
+            cfg.MODEL.DEVICE = "cpu"
             cfg.DATALOADER.NUM_WORKERS = 0
-            cfg.INPUT.FORMAT = "BGR"
-            
-            # Memory optimization for deployment
-            cfg.MODEL.RPN.PRE_NMS_TOPK_TRAIN = 2000
-            cfg.MODEL.RPN.PRE_NMS_TOPK_TEST = 1000
-            cfg.MODEL.RPN.POST_NMS_TOPK_TRAIN = 1000
-            cfg.MODEL.RPN.POST_NMS_TOPK_TEST = 1000
-            
-            # Register metadata
+
             MetadataCatalog.get("grape_disease").thing_classes = self.class_names
-            logger.info(f"📋 Registered {len(self.class_names)} classes")
-            
-            # Create predictor with enhanced error handling
-            try:
-                logger.info("🔧 Creating predictor...")
-                self.predictor = DefaultPredictor(cfg)
-                logger.info("✅ Predictor created successfully")
-                
-            except Exception as pred_error:
-                logger.error(f"❌ Predictor creation failed: {pred_error}")
-                logger.error(f"Error type: {type(pred_error).__name__}")
-                
-                # Try alternative approach
-                try:
-                    logger.info("🔄 Trying alternative predictor creation...")
-                    # Force reload weights
-                    cfg.MODEL.WEIGHTS = self.model_path
-                    self.predictor = DefaultPredictor(cfg)
-                    logger.info("✅ Alternative predictor creation successful")
-                except Exception as alt_error:
-                    logger.error(f"❌ Alternative predictor failed: {alt_error}")
-                    return False
-            
-            # Test model with simple prediction
-            try:
-                logger.info("🧪 Testing model...")
-                test_image = np.ones((400, 400, 3), dtype=np.uint8) * 128
-                with torch.no_grad():
-                    outputs = self.predictor(test_image)
-                logger.info("✅ Model test successful")
-                
-                # Log test results
-                instances = outputs["instances"]
-                logger.info(f"Test prediction: {len(instances)} detections")
-                
-            except Exception as test_error:
-                logger.error(f"❌ Model test failed: {test_error}")
-                return False
-            
-            self.model_loaded = True
-            logger.info("🎉 YOUR REAL MODEL IS LOADED AND READY!")
-            logger.info(f"Model device: {next(self.predictor.model.parameters()).device}")
+
+            logger.info("Creating DefaultPredictor (this may take a moment)...")
+            self.predictor = DefaultPredictor(cfg)
+            logger.info("Predictor created.")
+
+            # quick sanity inference
+            import numpy as np
+            test_img = np.ones((400, 400, 3), dtype=np.uint8) * 128
+            _ = self.predictor(test_img)
+            logger.info("Sanity inference OK.")
             return True
-            
         except ImportError as e:
-            logger.error(f"❌ Detectron2 import failed: {e}")
-            logger.error("Make sure detectron2 is properly installed")
+            detectron2_import_error = str(e)
+            logger.exception("Detectron2 import failed: %s", e)
             return False
         except Exception as e:
-            logger.error(f"❌ Model loading failed: {e}")
-            logger.error(f"Error details: {type(e).__name__}: {str(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.exception("Model loading failed: %s", e)
             return False
 
-    # Rest of your class methods remain the same...
-    # [Keep all your existing base64_to_image, predict, and other methods]
-    
-    def base64_to_image(self, base64_string):
-        """Convert base64 to OpenCV image"""
-        try:
-            # Handle different base64 formats
-            if ',' in base64_string:
-                base64_string = base64_string.split(',')[1]
-            
-            image_data = base64.b64decode(base64_string)
-            pil_image = Image.open(io.BytesIO(image_data))
-            
-            if pil_image.mode != 'RGB':
-                pil_image = pil_image.convert('RGB')
-            
-            opencv_image = cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-            return opencv_image
-        except Exception as e:
-            logger.error(f"❌ Image conversion failed: {e}")
-            return None
-    
-    def predict(self, image):
-        """Make prediction with your model"""
-        if not self.model_loaded:
-            raise Exception("Model not loaded")
-            
-        start_time = time.time()
-        
-        try:
-            logger.info("🔬 Running prediction...")
-            logger.info(f"Input image shape: {image.shape}")
-            
-            # Ensure image is in correct format
-            if len(image.shape) == 3:
-                if image.shape[2] == 4:  # RGBA
-                    image = cv2.cvtColor(image, cv2.COLOR_RGBA2BGR)
-                elif image.shape[2] == 3:
-                    # Already BGR from our conversion
-                    pass
-            
-            # Get predictions with error handling
-            with torch.no_grad():
-                outputs = self.predictor(image)
-                instances = outputs["instances"]
-            
-            logger.info(f"🎯 Model output: {len(instances)} detections")
-            
-            if len(instances) > 0:
-                # Move to CPU for processing
-                instances = instances.to("cpu")
-                scores = instances.scores.numpy()
-                classes = instances.pred_classes.numpy()
-                
-                # Get best detection
-                best_idx = np.argmax(scores)
-                class_id = int(classes[best_idx]) + 1  # Convert 0-4 to 1-5
-                confidence = float(scores[best_idx])
-                
-                # Ensure class_id is valid
-                if class_id not in self.disease_mapping:
-                    class_id = 5  # Default to healthy
-                
-                disease_info = self.disease_mapping[class_id]
-                
-                result = {
-                    "disease": disease_info["name"],
-                    "marathi": disease_info["marathi"],
-                    "confidence": round(confidence * 100, 1),
-                    "severity": disease_info["severity"],
-                    "processing_time": round(time.time() - start_time, 3),
-                    "model_info": {
-                        "type": "DETECTRON2_DEPLOYMENT",
-                        "detections": len(instances),
-                        "device": "cpu",
-                        "best_detection_class": int(classes[best_idx]),
-                        "all_detections": len(instances)
-                    }
-                }
-                
-                logger.info(f"✅ Prediction: {result['disease']} ({result['confidence']}%)")
-                return result
-            else:
-                # No detections = healthy
-                result = {
-                    "disease": "Healthy",
-                    "marathi": "निरोगी पान",
-                    "confidence": 95.0,
-                    "severity": "None",
-                    "processing_time": round(time.time() - start_time, 3),
-                    "model_info": {
-                        "type": "DETECTRON2_DEPLOYMENT",
-                        "detections": 0,
-                        "device": "cpu"
-                    }
-                }
-                logger.info("✅ No diseases detected - Healthy")
-                return result
-                
-        except Exception as e:
-            logger.error(f"❌ Prediction failed: {e}")
-            logger.error(f"Error type: {type(e).__name__}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            raise e
+    def predict_from_image(self, image_bgr):
+        """Run prediction and return dict with structured results and visualization (base64)."""
+        if self.predictor is None:
+            raise RuntimeError("Model not loaded")
 
-# Initialize detector
-MODEL_PATH = os.getenv('DETECTRON_MODEL_PATH', './model_final.pth')
-THRESHOLD = float(os.getenv('DETECTRON_THRESHOLD', '0.7'))
+        start = time.time()
+        outputs = self.predictor(image_bgr)
+        instances = outputs.get("instances", None)
+        results = {
+            "predictions": [],
+            "processing_time": None,
+            "visualization": None,
+            "detections": 0
+        }
 
-logger.info(f"🔧 Initializing detector with model: {MODEL_PATH}")
+        if instances is None or len(instances) == 0:
+            results["processing_time"] = round(time.time() - start, 3)
+            results["detections"] = 0
+            return results
+
+        # Move instances to cpu for safe indexing
+        inst_cpu = instances.to("cpu")
+        scores = inst_cpu.scores.tolist() if hasattr(inst_cpu, "scores") else []
+        classes = inst_cpu.pred_classes.tolist() if hasattr(inst_cpu, "pred_classes") else []
+        boxes = (inst_cpu.pred_boxes.tensor.tolist() if hasattr(inst_cpu, "pred_boxes") else [])
+
+        for i in range(len(scores)):
+            cls = int(classes[i])  # 0-based
+            score = float(scores[i])
+            bbox = boxes[i] if i < len(boxes) else None
+            results["predictions"].append({
+                "class_id": cls + 1,  # keep 1..5 mapping for frontend compatibility
+                "class_name": self.class_names[cls] if cls < len(self.class_names) else "Unknown",
+                "confidence": round(score, 4),
+                "bbox": bbox
+            })
+
+        # Visualization: draw predictions onto image
+        try:
+            from detectron2.utils.visualizer import Visualizer
+            from detectron2.data import MetadataCatalog
+            vis = Visualizer(image_bgr[:, :, ::-1], MetadataCatalog.get("grape_disease"), scale=1.0)
+            vis_out = vis.draw_instance_predictions(inst_cpu)
+            vis_img = vis_out.get_image()[:, :, ::-1]  # RGB -> BGR
+            import cv2
+            success, encoded = cv2.imencode('.jpg', vis_img)
+            if success:
+                results["visualization"] = base64.b64encode(encoded.tobytes()).decode("utf-8")
+        except Exception as e:
+            logger.warning("Visualization failed: %s", e)
+
+        results["processing_time"] = round(time.time() - start, 3)
+        results["detections"] = len(results["predictions"])
+        return results
+
+
+# Create detector instance (but do not fail import if loading fails)
 detector = GrapeDiseaseDetector(MODEL_PATH, THRESHOLD)
 
-# Load model immediately when server starts (works with Gunicorn too)
-success = detector.load_model()
-if success:
-    logger.info("🎉 Model loaded at startup (global init)")
-else:
-    logger.error("💥 Model failed to load at startup")
+# Attempt model loading at import time (so Gunicorn/Render import triggers it)
+try:
+    logger.info("Attempting to load model at import time...")
+    loaded_ok = detector.load_model()
+    if loaded_ok:
+        model_loaded = True
+        logger.info("Model loaded successfully at import time.")
+    else:
+        model_loaded = False
+        logger.warning("Model did NOT load at import time.")
+except Exception as e:
+    model_loaded = False
+    logger.exception("Model load threw exception at import time: %s", e)
 
 
-@app.route('/health', methods=['GET'])
-def health_check():
-    """Enhanced health check endpoint"""
-    model_exists = os.path.exists(detector.model_path)
-    model_size = os.path.getsize(detector.model_path) / (1024*1024) if model_exists else 0
-    
-    return jsonify({
-        "status": "READY" if detector.model_loaded else "NOT_READY",
-        "model_loaded": detector.model_loaded,
-        "model_exists": model_exists,
-        "model_path": detector.model_path,
-        "model_size_mb": round(model_size, 1),
-        "classes": detector.class_names,
-        "threshold": detector.threshold,
-        "torch_version": torch.__version__,
-        "device": "cpu",
-        "architecture": "MASK_RCNN_DEPLOYMENT",
-        "python_version": sys.version,
-        "working_directory": os.getcwd(),
-        "environment": os.getenv('FLASK_ENV', 'development')
-    })
-
-@app.route('/predict', methods=['POST'])
-def predict():
-    """Model prediction endpoint with enhanced error handling"""
+# Helpers: convert multipart file / base64 / imageUrl to OpenCV (BGR) np array
+def pil_file_to_bgr(file_stream) -> Optional[object]:
     try:
-        if not detector.model_loaded:
-            return jsonify({
-                "error": "Model not loaded - check /health endpoint for details",
-                "status": "model_not_available",
-                "model_path": detector.model_path,
-                "model_exists": os.path.exists(detector.model_path)
-            }), 500
-        
-        # Get request data
-        data = request.get_json()
-        
-        if not data or 'image' not in data:
-            return jsonify({
-                "error": "No image data provided", 
-                "expected_format": "{'image': 'base64_encoded_image'}"
-            }), 400
-        
-        # Convert image
-        image = detector.base64_to_image(data['image'])
-        if image is None:
-            return jsonify({
-                "error": "Invalid image data - could not decode base64",
-                "hint": "Ensure image is properly base64 encoded"
-            }), 400
-        
-        # Make prediction
-        result = detector.predict(image)
-        result['timestamp'] = time.time()
-        result['server_info'] = {
-            "model_loaded": True,
-            "deployment": "render",
-            "version": "1.0.0"
-        }
-        
-        return jsonify(result)
-        
+        from PIL import Image
+        import numpy as np
+        img = Image.open(io.BytesIO(file_stream)).convert("RGB")
+        arr = np.array(img)[:, :, ::-1]  # RGB -> BGR
+        return arr
     except Exception as e:
-        logger.error(f"❌ Prediction endpoint error: {e}")
-        logger.error(f"Error type: {type(e).__name__}")
-        import traceback
-        logger.error(f"Traceback: {traceback.format_exc()}")
-        
-        return jsonify({
-            "error": str(e),
-            "type": "prediction_error",
-            "model_status": detector.model_loaded,
-            "timestamp": time.time()
-        }), 500
+        logger.exception("Failed to convert PIL->BGR: %s", e)
+        return None
 
-@app.route('/', methods=['GET'])
-def root():
-    """Root endpoint"""
+
+@app.route("/health", methods=["GET"])
+def health():
     return jsonify({
-        "message": "GrapeGuard AI - Detectron2 Deployment",
-        "status": "READY" if detector.model_loaded else "LOADING",
-        "endpoints": {
-            "health": "/health - Check model status",
-            "predict": "/predict - Make disease predictions",
-            "root": "/ - This endpoint"
-        },
-        "model_status": "LOADED" if detector.model_loaded else "NOT_LOADED",
-        "version": "1.0.0",
-        "deployment": "render"
+        "status": "READY" if model_loaded else "NOT_READY",
+        "model_loaded": model_loaded,
+        "model_exists": MODEL_PATH.exists(),
+        "model_path": str(MODEL_PATH),
+        "model_size_bytes": MODEL_PATH.stat().st_size if MODEL_PATH.exists() else 0,
+        "threshold": THRESHOLD,
+        "torch_version": torch_version,
+        "detectron2_version": detectron2_version,
+        "detectron2_import_error": detectron2_import_error,
+        "classes": detector.class_names
     })
 
-# Error handlers
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({
-        "error": "Endpoint not found",
-        "available_endpoints": ["/", "/health", "/predict"]
-    }), 404
 
-@app.errorhandler(500)
-def internal_error(error):
-    return jsonify({
-        "error": "Internal server error",
-        "model_status": detector.model_loaded if detector else False
-    }), 500
+@app.route("/predict", methods=["POST"])
+def predict_route():
+    if not model_loaded:
+        return jsonify({"error": "Model not loaded", "model_loaded": False}), 503
 
-if __name__ == '__main__':
-    logger.info("🚀 Starting GrapeGuard Detectron2 Server...")
-    logger.info(f"Python version: {sys.version}")
-    logger.info(f"PyTorch version: {torch.__version__}")
-    logger.info(f"Working directory: {os.getcwd()}")
-    logger.info(f"Model path: {MODEL_PATH}")
-    
-    # # Load model
-    # success = detector.load_model()
-    
-    # if success:
-    #     logger.info("🎉 SERVER READY - MODEL LOADED!")
-    # else:
-    #     logger.error("💥 MODEL FAILED TO LOAD - Server starting anyway")
-    #     logger.error("Check /health endpoint for diagnostics")
-    
-    # Start server
-    port = int(os.environ.get('PORT', 5000))
-    logger.info(f"🌐 Server starting on port {port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    # Accept: multipart (file), JSON: { image: "<base64>", imageUrl: "<url>" }
+    image_bgr = None
+
+    # multipart file upload
+    if 'image' in request.files:
+        file = request.files['image'].read()
+        image_bgr = pil_file_to_bgr(file)
+
+    # JSON body
+    if image_bgr is None:
+        data = None
+        try:
+            data = request.get_json(silent=True)
+        except Exception:
+            data = None
+
+        if data:
+            if "image" in data:  # base64 string (may include data: prefix)
+                b = data["image"]
+                if b.startswith("data:"):
+                    b = b.split(",", 1)[1]
+                try:
+                    decoded = base64.b64decode(b)
+                    image_bgr = pil_file_to_bgr(decoded)
+                except Exception as e:
+                    logger.exception("Failed to decode base64 image: %s", e)
+                    return jsonify({"error": "Invalid base64 image"}), 400
+
+            elif "imageUrl" in data:
+                try:
+                    r = requests.get(data["imageUrl"], stream=True, timeout=30)
+                    r.raise_for_status()
+                    image_bgr = pil_file_to_bgr(r.content)
+                except Exception as e:
+                    logger.exception("Failed to download imageUrl: %s", e)
+                    return jsonify({"error": "Failed to download imageUrl", "detail": str(e)}), 400
+
+    if image_bgr is None:
+        return jsonify({"error": "No image provided. Send multipart-file (image) or JSON {image: base64} or {imageUrl}"}), 400
+
+    try:
+        res = detector.predict_from_image(image_bgr)
+        # map class ids to your marathi/severity mapping if you want (frontend already has mapping)
+        res["timestamp"] = time.time()
+        res["model_info"] = {"type": "detectron2", "torch_version": torch_version, "detectron2_version": detectron2_version}
+        return jsonify(res)
+    except Exception as e:
+        logger.exception("Prediction failed: %s", e)
+        return jsonify({"error": "prediction_failed", "detail": str(e)}), 500
+
+
+@app.route("/", methods=["GET"])
+def root():
+    return jsonify({
+        "message": "GrapeGuard Detectron2 server",
+        "status": "READY" if model_loaded else "NOT_READY",
+        "endpoints": ["/health", "/predict"]
+    })
+
+
+if __name__ == "__main__":
+    # When running directly, try loading model if not loaded and start Flask dev server (for local dev)
+    if not model_loaded:
+        try:
+            logger.info("Loading model in __main__ before starting local server...")
+            model_loaded = detector.load_model()
+        except Exception as e:
+            logger.exception("Load in __main__ failed: %s", e)
+
+    logger.info("Starting local Flask server on 0.0.0.0:%s ...", PORT)
+    app.run(host="0.0.0.0", port=PORT, debug=False)
